@@ -53,8 +53,7 @@ class Window {
 	public var vsync(default, set) : Bool;
 	public var width(get, never) : Int;
 	public var height(get, never) : Int;
-	public var pixelWidth(get, never) : Int;
-	public var pixelHeight(get, never) : Int;
+	public var windowToPixelRatio(get, never) : Float;
 	public var minWidth(get, never) : Int;
 	public var minHeight(get, never) : Int;
 	public var maxWidth(get, never) : Int;
@@ -190,16 +189,12 @@ class Window {
 		return w;
 	}
 
-	function get_pixelWidth() {
-		var w = 0;
-		winGetPixelSize(win, w, null);
-		return w;
-	}
+	function get_windowToPixelRatio() {
+		var pixelHeight = 0;
+		winGetPixelSize(win, null, pixelHeight);
+		var h : Float = height;
 
-	function get_pixelHeight() {
-		var h = 0;
-		winGetPixelSize(win, null, h);
-		return h;
+		return h / pixelHeight;
 	}
 
 	function get_height() {
