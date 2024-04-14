@@ -5,6 +5,7 @@
 
 #if defined(_WIN32) || defined(__ANDROID__) || defined(HL_IOS) || defined(HL_TVOS)
 #	include <SDL.h>
+#	include <SDL_vulkan.h>
 #	include <SDL_syswm.h>
 #else
 #	include <SDL2/SDL.h>
@@ -91,12 +92,14 @@ typedef struct {
 	int keyCode;
 	int scanCode;
 	bool keyRepeat;
-	int controller;
+	int reference;
 	int value;
-	int fingerId;
-	int joystick;
+	int __unused;
+	int window;
 	vbyte* dropFile;
 } event_data;
+
+static bool isGlOptionsSet = false;
 
 HL_PRIM bool HL_NAME(init_once)() {
 	SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
@@ -110,23 +113,26 @@ HL_PRIM bool HL_NAME(init_once)() {
 	timeBeginPeriod(1);
 #	endif
 	// default GL parameters
+	if (!isGlOptionsSet) {
 #ifdef HL_MOBILE
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #else
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 #endif
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+		SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+		SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	}
 
 	return true;
 }
 
 HL_PRIM void HL_NAME(gl_options)( int major, int minor, int depth, int stencil, int flags, int samples ) {
+	isGlOptionsSet = true;
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, major);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, depth);
@@ -138,8 +144,13 @@ HL_PRIM void HL_NAME(gl_options)( int major, int minor, int depth, int stencil, 
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 	else if( flags&8 )
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-	else
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0); // auto
+	else {
+#ifdef HL_MOBILE
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
+	}
 
 	if (samples > 1) {
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
@@ -149,6 +160,10 @@ HL_PRIM void HL_NAME(gl_options)( int major, int minor, int depth, int stencil, 
 
 HL_PRIM bool HL_NAME(hint_value)( vbyte* name, vbyte* value) {
 	return SDL_SetHint((char*)name, (char*)value) == SDL_TRUE;
+}
+
+HL_PRIM int HL_NAME(event_poll)( SDL_Event *e ) {
+	return SDL_PollEvent(e);
 }
 
 HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
@@ -161,6 +176,7 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			break;
 		case SDL_MOUSEMOTION:
 			event->type = MouseMove;
+			event->window = e.motion.windowID;
 			event->mouseX = e.motion.x;
 			event->mouseY = e.motion.y;
 			event->mouseXRel = e.motion.xrel;
@@ -168,12 +184,14 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			break;
 		case SDL_KEYDOWN:
 			event->type = KeyDown;
+			event->window = e.key.windowID;
 			event->keyCode = e.key.keysym.sym;
 			event->scanCode = e.key.keysym.scancode;
 			event->keyRepeat = e.key.repeat != 0;
 			break;
 		case SDL_KEYUP:
 			event->type = KeyUp;
+			event->window = e.key.windowID;
 			event->keyCode = e.key.keysym.sym;
 			event->scanCode = e.key.keysym.scancode;
 			break;
@@ -181,12 +199,14 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			continue;
 		case SDL_MOUSEBUTTONDOWN:
 			event->type = MouseDown;
+			event->window = e.button.windowID;
 			event->button = e.button.button;
 			event->mouseX = e.button.x;
 			event->mouseY = e.motion.y;
 			break;
 		case SDL_MOUSEBUTTONUP:
 			event->type = MouseUp;
+			event->window = e.button.windowID;
 			event->button = e.button.button;
 			event->mouseX = e.button.x;
 			event->mouseY = e.motion.y;
@@ -195,22 +215,23 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			event->type = TouchDown;
 			event->mouseX = (int)(e.tfinger.x*10000);
 			event->mouseY = (int)(e.tfinger.y*10000);
-			event->fingerId = (int)e.tfinger.fingerId;
+			event->reference = (int)e.tfinger.fingerId;
 			break;
 		case SDL_FINGERMOTION:
 			event->type = TouchMove;
 			event->mouseX = (int)(e.tfinger.x*10000);
 			event->mouseY = (int)(e.tfinger.y*10000);
-			event->fingerId = (int)e.tfinger.fingerId;
+			event->reference = (int)e.tfinger.fingerId;
 			break;
 		case SDL_FINGERUP:
 			event->type = TouchUp;
 			event->mouseX = (int)(e.tfinger.x*10000);
 			event->mouseY = (int)(e.tfinger.y*10000);
-			event->fingerId = (int)e.tfinger.fingerId;
+			event->reference = (int)e.tfinger.fingerId;
 			break;
 		case SDL_MOUSEWHEEL:
 			event->type = MouseWheel;
+			event->window = e.wheel.windowID;
 			event->wheelDelta = e.wheel.y;
 #						if SDL_VERSION_ATLEAST(2,0,4)
 			if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) event->wheelDelta *= -1;
@@ -220,6 +241,7 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			break;
 		case SDL_WINDOWEVENT:
 			event->type = WindowState;
+			event->window = e.window.windowID;
 			switch (e.window.event) {
 			case SDL_WINDOWEVENT_SHOWN:
 				event->state = Show;
@@ -270,82 +292,86 @@ HL_PRIM bool HL_NAME(event_loop)( event_data *event ) {
 			continue;
 		case SDL_TEXTINPUT:
 			event->type = TextInput;
+			event->window = e.text.windowID;
 			event->keyCode = *(int*)e.text.text;
 			event->keyCode &= e.text.text[0] ? e.text.text[1] ? e.text.text[2] ? e.text.text[3] ? 0xFFFFFFFF : 0xFFFFFF : 0xFFFF : 0xFF : 0;
 			break;
 		case SDL_CONTROLLERDEVICEADDED:
 			event->type = GControllerAdded;
-			event->controller = e.jdevice.which;
+			event->reference = e.jdevice.which;
 			break;
 		case SDL_CONTROLLERDEVICEREMOVED:
 			event->type = GControllerRemoved;
-			event->controller = e.jdevice.which;
+			event->reference = e.jdevice.which;
 			break;
 		case SDL_CONTROLLERBUTTONDOWN:
 			event->type = GControllerDown;
-			event->controller = e.cbutton.which;
+			event->reference = e.cbutton.which;
 			event->button = e.cbutton.button;
 			break;
 		case SDL_CONTROLLERBUTTONUP:
 			event->type = GControllerUp;
-			event->controller = e.cbutton.which;
+			event->reference = e.cbutton.which;
 			event->button = e.cbutton.button;
 			break;
 		case SDL_CONTROLLERAXISMOTION:
 			event->type = GControllerAxis;
-			event->controller = e.caxis.which;
+			event->reference = e.caxis.which;
 			event->button = e.caxis.axis;
 			event->value = e.caxis.value;
 			break;
 		case SDL_JOYAXISMOTION:
 			event->type = JoystickAxisMotion;
-			event->joystick = e.jaxis.which;
+			event->reference = e.jaxis.which;
 			event->button = e.jaxis.axis;
 			event->value = e.jaxis.value;
 			break;
 		case SDL_JOYBALLMOTION:
 			event->type = JoystickBallMotion;
-			event->joystick = e.jball.which;
+			event->reference = e.jball.which;
 			event->button = e.jball.ball;
 			event->mouseXRel = e.jball.xrel;
 			event->mouseYRel = e.jball.yrel;
 			break;
 		case SDL_JOYHATMOTION:
 			event->type = JoystickHatMotion;
-			event->joystick = e.jhat.which;
+			event->reference = e.jhat.which;
 			event->button = e.jhat.hat;
 			event->value = e.jhat.value;
 			break;
 		case SDL_JOYBUTTONDOWN:
 			event->type = JoystickButtonDown;
-			event->joystick = e.jbutton.which;
+			event->reference = e.jbutton.which;
 			event->button = e.jbutton.button;
 			break;
 		case SDL_JOYBUTTONUP:
 			event->type = JoystickButtonUp;
-			event->joystick = e.jbutton.which;
+			event->reference = e.jbutton.which;
 			event->button = e.jbutton.button;
 			break;
 		case SDL_JOYDEVICEADDED:
 			event->type = JoystickAdded;
-			event->joystick = e.jdevice.which;
+			event->reference = e.jdevice.which;
 			break;
 		case SDL_JOYDEVICEREMOVED:
 			event->type = JoystickRemoved;
-			event->joystick = e.jdevice.which;
+			event->reference = e.jdevice.which;
 			break;
 		case SDL_DROPBEGIN:
 			event->type = DropStart;
+			event->window = e.drop.windowID;
 			break;
 		case SDL_DROPFILE: case SDL_DROPTEXT: {
 			vbyte* bytes = hl_copy_bytes(e.drop.file, (int)strlen(e.drop.file) + 1);
 			SDL_free(e.drop.file);
 			event->type = e.type == SDL_DROPFILE ? DropFile : DropText;
 			event->dropFile = bytes;
+			event->window = e.drop.windowID;
 			break;
 		}
 		case SDL_DROPCOMPLETE:
 			event->type = DropEnd;
+			event->window = e.drop.windowID;
 			break;
 		default:
 			//printf("Unknown event type 0x%X\\n", e.type);
@@ -449,6 +475,10 @@ HL_PRIM bool HL_NAME(get_window_grab)(SDL_Window* window) {
 	return SDL_GetWindowGrab(window);
 }
 
+HL_PRIM int HL_NAME(get_global_mouse_state)(int* x, int* y) {
+	return SDL_GetGlobalMouseState(x, y);
+}
+
 HL_PRIM const char *HL_NAME(detect_keyboard_layout)() {
 	char q = SDL_GetKeyFromScancode(SDL_SCANCODE_Q);
 	char w = SDL_GetKeyFromScancode(SDL_SCANCODE_W);
@@ -465,6 +495,7 @@ HL_PRIM const char *HL_NAME(detect_keyboard_layout)() {
 DEFINE_PRIM(_BOOL, init_once, _NO_ARG);
 DEFINE_PRIM(_VOID, gl_options, _I32 _I32 _I32 _I32 _I32 _I32);
 DEFINE_PRIM(_BOOL, event_loop, _DYN );
+DEFINE_PRIM(_I32, event_poll, _STRUCT );
 DEFINE_PRIM(_VOID, quit, _NO_ARG);
 DEFINE_PRIM(_VOID, delay, _I32);
 DEFINE_PRIM(_I32, get_screen_width, _NO_ARG);
@@ -482,6 +513,7 @@ DEFINE_PRIM(_I32, warp_mouse_global, _I32 _I32);
 DEFINE_PRIM(_VOID, warp_mouse_in_window, TWIN _I32 _I32);
 DEFINE_PRIM(_VOID, set_window_grab, TWIN _BOOL);
 DEFINE_PRIM(_BOOL, get_window_grab, TWIN);
+DEFINE_PRIM(_I32, get_global_mouse_state, _REF(_I32) _REF(_I32));
 DEFINE_PRIM(_BYTES, detect_keyboard_layout, _NO_ARG);
 DEFINE_PRIM(_BOOL, hint_value, _BYTES _BYTES);
 
@@ -489,12 +521,20 @@ DEFINE_PRIM(_BOOL, hint_value, _BYTES _BYTES);
 
 HL_PRIM SDL_Window *HL_NAME(win_create_ex)(int x, int y, int width, int height, int sdlFlags) {
 	// force window to match device resolution on mobile
+	if (sdlFlags & (
+#ifdef HL_MAC
+		SDL_WINDOW_METAL | 
+#endif
+		SDL_WINDOW_VULKAN ) == 0) {
+		sdlFlags |= SDL_WINDOW_OPENGL;
+	}
+
 #ifdef	HL_MOBILE
 	SDL_DisplayMode displayMode;
 	SDL_GetDesktopDisplayMode(0, &displayMode);
-	SDL_Window* win = SDL_CreateWindow("", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS | sdlFlags);
+	SDL_Window* win = SDL_CreateWindow("", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_BORDERLESS | sdlFlags);
 #else
-	SDL_Window* win = SDL_CreateWindow("", x, y, width, height, SDL_WINDOW_OPENGL | sdlFlags);
+	SDL_Window* win = SDL_CreateWindow("", x, y, width, height, sdlFlags);
 #endif
 #	ifdef HL_WIN
 	// force window to show even if the debugger force process windows to be hidden
@@ -670,6 +710,10 @@ HL_PRIM void HL_NAME(win_render_to)(SDL_Window *win, SDL_GLContext gl) {
 	SDL_GL_MakeCurrent(win, gl);
 }
 
+HL_PRIM int HL_NAME(win_get_id)(SDL_Window *window) {
+	return SDL_GetWindowID(window);
+}
+
 HL_PRIM void HL_NAME(win_destroy)(SDL_Window *win, SDL_GLContext gl) {
 	SDL_DestroyWindow(win);
 	SDL_GL_DeleteContext(gl);
@@ -698,6 +742,7 @@ DEFINE_PRIM(_BOOL, win_set_opacity, TWIN _F64);
 DEFINE_PRIM(_VOID, win_swap_window, TWIN);
 DEFINE_PRIM(_VOID, win_render_to, TWIN TGL);
 DEFINE_PRIM(_VOID, win_destroy, TWIN TGL);
+DEFINE_PRIM(_I32, win_get_id, TWIN);
 
 // game controller
 

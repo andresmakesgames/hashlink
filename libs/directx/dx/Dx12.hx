@@ -180,6 +180,7 @@ abstract CommandList(Resource) {
 	public function clearDepthStencilView( rtv : Address, flags : ClearFlags, depth : Single, stencil : Int ) {}
 	public function reset( alloc : CommandAllocator, state : PipelineState ) {}
 	public function resourceBarrier( b : ResourceBarrier ) {}
+	public function resourceBarriers( b : hl.CArray<ResourceBarrier>, barrierCount : Int ) {}
 	public function setPipelineState( state : PipelineState ) {}
 	public function setDescriptorHeaps( heaps : hl.NativeArray<DescriptorHeap> ) {}
 	public function copyBufferRegion( dst : GpuResource, dstOffset : Int64, src : GpuResource, srcOffset : Int64, size : Int64 ) {}
@@ -352,7 +353,7 @@ enum abstract ResourceState(Int) {
 	public var RESOLVE_SOURCE = 0x2000;
 	public var RAYTRACING_ACCELERATION_STRUCTURE = 0x400000;
 	public var SHADING_RATE_SOURCE = 0x1000000;
-	public var GENERIC_READ = 0x1 | 0x2 | 0x40  | 0x80  | 0x200  | 0x800;
+	public var GENERIC_READ = 0x1 | 0x2 | 0x40 | 0x80 | 0x200 | 0x800;
 	public var ALL_SHADER_RESOURCE = 0x40 | 0x80;
 	public var PRESENT = 0;
 	public var PREDICATION = 0x200;
@@ -363,6 +364,7 @@ enum abstract ResourceState(Int) {
 	public var VIDE_ENCODE_READ = 0x200000;
 	public var VIDE_ENCODE_WRITE = 0x800000;
 	@:op(a|b) function or(r:ResourceState):ResourceState;
+	@:op(a&b) function and(r:ResourceState):ResourceState;
 }
 
 @:struct class Color {
@@ -388,24 +390,24 @@ typedef ClearColor = Color;
 
 enum abstract DsvDimension(Int) {
 	var UNKNOWN	= 0;
-    var TEXTURE1D = 1;
-    var TEXTURE1DARRAY = 2;
-    var TEXTURE2D = 3;
-    var TEXTURE2DARRAY = 4;
-    var TEXTURE2DMS = 5;
-    var TEXTURE2DMSARRAY = 6;
+	var TEXTURE1D = 1;
+	var TEXTURE1DARRAY = 2;
+	var TEXTURE2D = 3;
+	var TEXTURE2DARRAY = 4;
+	var TEXTURE2DMS = 5;
+	var TEXTURE2DMSARRAY = 6;
 }
 
 enum abstract RtvDimension(Int) {
 	var UNKNOWN	= 0;
 	var BUFFER = 1;
-    var TEXTURE1D = 2;
-    var TEXTURE1DARRAY = 3;
-    var TEXTURE2D = 4;
-    var TEXTURE2DARRAY = 5;
-    var TEXTURE2DMS = 6;
-    var TEXTURE2DMSARRAY = 7;
-    var TEXTURE3D = 8;
+	var TEXTURE1D = 2;
+	var TEXTURE1DARRAY = 3;
+	var TEXTURE2D = 4;
+	var TEXTURE2DARRAY = 5;
+	var TEXTURE2DMS = 6;
+	var TEXTURE2DMSARRAY = 7;
+	var TEXTURE3D = 8;
 }
 
 @:struct class RenderTargetViewDesc {
@@ -795,6 +797,7 @@ enum abstract DxgiFormat(Int) {
 	var P208 = 130;
 	var V208 = 131;
 	var V408 = 132;
+	public inline function toInt() return this;
 }
 
 @:struct class ShaderBytecode {
@@ -1092,7 +1095,7 @@ enum abstract PipelineStateFlags(Int) {
 	@:packed public var depthStencilDesc(default,null) : DepthStencilDesc;
 	@:packed public var inputLayout(default,null) : InputLayoutDesc;
 	var __padding : Int; // ?
-  	public var ibStripCutValue : IndexBufferStripCutValue;
+	public var ibStripCutValue : IndexBufferStripCutValue;
 	public var primitiveTopologyType : PrimitiveTopologyType;
 	public var numRenderTargets : Int;
 	public var rtvFormats(get,never) : GraphicsRTVFormats;
@@ -1444,7 +1447,7 @@ enum abstract UAVDimension(Int) {
 }
 
 @:struct class UnorderedAccessViewDesc {
-	public var format : Format;
+	public var format : DxgiFormat;
 	public var viewDimension : UAVDimension;
 }
 

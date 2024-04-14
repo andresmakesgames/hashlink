@@ -90,6 +90,9 @@ class GL {
 	public static function polygonMode( face : Int, mode : Int ) {
 	}
 
+	public static function polygonOffset( factor : hl.F32, units : hl.F32 ) {
+	}
+
 	public static function enable( feature : Int ) {
 	}
 
@@ -208,6 +211,10 @@ class GL {
 	}
 
 	public static function bindTexture( t : Int, texture : Texture ) {
+	}
+
+	@:hlNative("?mesa","gl_bind_image_texture")
+	public static function bindImageTexture( unit : Int, texture : Int, level : Int, layered : Bool, layer : Int, access : Int, format : Int ) {
 	}
 
 	public static function texParameteri( t : Int, key : Int, value : Int ) {
@@ -466,7 +473,7 @@ class GL {
 	/* BlendEquationSeparate */
 	public static inline var FUNC_ADD                       = 0x8006;
 	public static inline var FUNC_MIN                       = 0x8007;
-    public static inline var FUNC_MAX                       = 0x8008;
+	public static inline var FUNC_MAX                       = 0x8008;
 	public static inline var BLEND_EQUATION                 = 0x8009;
 	public static inline var BLEND_EQUATION_RGB             = 0x8009;   /* same as BLEND_EQUATION */
 	public static inline var BLEND_EQUATION_ALPHA           = 0x883D;
@@ -644,13 +651,13 @@ class GL {
 	public static inline var RG16UI                         = 0x823A;
 	public static inline var RG16F                          = 0x822F;
 	public static inline var RG32F                          = 0x8230;
-	public static inline var R8								= 0x8229;
-	public static inline var RG8							= 0x822B;
-	public static inline var R16F							= 0x822D;
-	public static inline var R32F							= 0x822E;
-	public static inline var UNSIGNED_INT_2_10_10_10_REV	= 0x8368;
-	public static inline var UNSIGNED_INT_10F_11F_11F_REV	= 0x8C3B;
-	public static inline var UNSIGNED_INT_24_8				= 0x84FA;
+	public static inline var R8                             = 0x8229;
+	public static inline var RG8                            = 0x822B;
+	public static inline var R16F                           = 0x822D;
+	public static inline var R32F                           = 0x822E;
+	public static inline var UNSIGNED_INT_2_10_10_10_REV    = 0x8368;
+	public static inline var UNSIGNED_INT_10F_11F_11F_REV   = 0x8C3B;
+	public static inline var UNSIGNED_INT_24_8              = 0x84FA;
 
 	/* PixelType */
 	/*      UNSIGNED_BYTE */
@@ -750,7 +757,7 @@ class GL {
 	public static inline var TEXTURE_2D_MULTISAMPLE         = 0x9100;
 	public static inline var TEXTURE_3D                     = 0x806F;
 	public static inline var TEXTURE                        = 0x1702;
-	public static inline var TEXTURE_2D_ARRAY				= 0x8C1A;
+	public static inline var TEXTURE_2D_ARRAY               = 0x8C1A;
 
 	public static inline var TEXTURE_CUBE_MAP_SEAMLESS      = 0x884F;
 	public static inline var TEXTURE_CUBE_MAP               = 0x8513;
@@ -762,6 +769,21 @@ class GL {
 	public static inline var TEXTURE_CUBE_MAP_POSITIVE_Z    = 0x8519;
 	public static inline var TEXTURE_CUBE_MAP_NEGATIVE_Z    = 0x851A;
 	public static inline var MAX_CUBE_MAP_TEXTURE_SIZE      = 0x851C;
+
+	/* Image */
+	public static inline var READ_ONLY                      = 0x88B8;
+	public static inline var WRITE_ONLY                     = 0x88B9;
+	public static inline var READ_WRITE                     = 0x88BA;
+
+	public static inline var IMAGE_1D                       = 0x904C;
+	public static inline var IMAGE_2D                       = 0x904D;
+	public static inline var IMAGE_3D                       = 0x904E;
+	public static inline var IMAGE_2D_RECT                  = 0x904F;
+	public static inline var IMAGE_CUBE                     = 0x9050;
+	public static inline var IMAGE_BUFFER                   = 0x9051;
+	public static inline var IMAGE_1D_ARRAY                 = 0x9052;
+	public static inline var IMAGE_2D_ARRAY                 = 0x9053;
+	public static inline var IMAGE_CUBE_MAP_ARRAY           = 0x9054;
 
 	/* TextureUnit */
 	public static inline var TEXTURE0                       = 0x84C0;
@@ -849,14 +871,15 @@ class GL {
 	public static inline var RENDERBUFFER                   = 0x8D41;
 	public static inline var READ_FRAMEBUFFER               = 0x8CA8;
 	public static inline var DRAW_FRAMEBUFFER               = 0x8CA9;
-	public static inline var DRAW_INDIRECT_BUFFER			= 0x8F3F;
+	public static inline var DRAW_INDIRECT_BUFFER           = 0x8F3F;
 
 	public static inline var RGBA4                          = 0x8056;
 	public static inline var RGB5_A1                        = 0x8057;
 	public static inline var RGB565                         = 0x8D62;
 	public static inline var DEPTH_COMPONENT16              = 0x81A5;
 	public static inline var DEPTH_COMPONENT24              = 0x81A6;
-	public static inline var DEPTH24_STENCIL8              	= 0x88F0;
+	public static inline var DEPTH24_STENCIL8               = 0x88F0;
+	public static inline var DEPTH_COMPONENT32F             = 0x8cac;
 	public static inline var STENCIL_INDEX                  = 0x1901;
 	public static inline var STENCIL_INDEX8                 = 0x8D48;
 	public static inline var DEPTH_STENCIL                  = 0x84F9;
