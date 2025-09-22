@@ -21,6 +21,7 @@
  */
 #include <hl.h>
 #include <hlmodule.h>
+#include "hlsystem.h"
 
 #ifdef HL_LINUX
 #include <semaphore.h>
@@ -241,7 +242,15 @@ static void read_thread_data( thread_handle *t ) {
 #else
 	int size = (int)((unsigned char*)t->inf->stack_top - (unsigned char*)stack);
 	if( size > MAX_STACK_SIZE-32 ) size = MAX_STACK_SIZE-32;
-	memcpy(data.tmpMemory + 2,stack,size);
+#ifdef HL_WIN_DESKTOP
+	// it seems we rarely can't make a first read on the thread stack, let's ignore errors and wait.
+	__try {
+#endif
+		memcpy(data.tmpMemory + 2,stack,size);
+#ifdef HL_WIN_DESKTOP
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+	}
+#endif
 	pause_thread(t, false);
 	data.tmpMemory[0] = eip;
 	data.tmpMemory[1] = stack;
@@ -408,14 +417,15 @@ static int write_names( thread_handle *h, FILE *f ) {
 	return count;
 }
 
-static void profile_dump() {
+static void profile_dump( vbyte* ptr ) {
 	if( !data.first_record ) return;
 
 	data.profiling_pause++;
 	printf("Writing profiling data...\n");
 	fflush(stdout);
 
-	FILE *f = fopen("hlprofile.dump","wb");
+	char* filename = ptr == NULL ? "hlprofile.dump" : hl_to_utf8((uchar*)ptr);
+	FILE *f = fopen(filename,"wb");
 	int version = HL_VERSION;
 	fwrite("PROF",1,4,f);
 	fwrite(&version,1,4,f);
@@ -503,7 +513,7 @@ static void profile_dump() {
 }
 
 void hl_profile_end() {
-	profile_dump();
+	profile_dump(NULL);
 	if( !data.sample_count ) return;
 	data.stopLoop = true;
 	while( data.stopLoop ) {};
@@ -539,7 +549,7 @@ static void profile_event( int code, vbyte *ptr, int dataLen ) {
 		data.profiling_pause--;
 		break;
 	case -6:
-		profile_dump();
+		profile_dump(ptr);
 		break;
 	case -7:
 		{

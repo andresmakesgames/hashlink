@@ -21,10 +21,15 @@
  */
 #include "hl.h"
 #ifdef HL_WIN
+#	undef _GUID
 #	include <windows.h>
 #else
 #	include <sys/types.h>
 #	include <sys/mman.h>
+#endif
+
+#if defined(HL_EMSCRIPTEN)
+#	include <emscripten/heap.h>
 #endif
 
 #if defined(HL_VCC)
@@ -286,7 +291,7 @@ HL_PRIM void hl_remove_root( void *v ) {
 	for(i=gc_roots_count-1;i>=0;i--)
 		if( gc_roots[i] == (void**)v ) {
 			gc_roots_count--;
-			memmove(gc_roots + i, gc_roots + (i+1), (gc_roots_count - i) * sizeof(void*));
+			gc_roots[i] = gc_roots[gc_roots_count];
 			break;
 		}
 	gc_global_lock(false);
@@ -734,7 +739,9 @@ static int gc_flush_mark( gc_mstack *stack ) {
 				if( (int_val)t == 0xDDDDDDDD ) continue;
 #				endif
 #			endif
-			if( t && t->mark_bits && t->kind != HFUN ) {
+			if( !t )
+				continue; // skip not allocated block
+			if( t->mark_bits && t->kind != HFUN ) {
 				mark_bits = t->mark_bits;
 				if( t->kind == HENUM ) {
 					mark_bits += ((venum*)block)->index;
@@ -1179,6 +1186,8 @@ static void *gc_alloc_page_memory( int size ) {
 	return ptr;
 #elif defined(HL_CONSOLE)
 	return sys_alloc_align(size, GC_PAGE_SIZE);
+#elif defined(HL_EMSCRIPTEN)
+	return emscripten_builtin_memalign(GC_PAGE_SIZE, size);
 #else
 	static int recursions = 0;
 	int i = 0;
@@ -1198,7 +1207,7 @@ static void *gc_alloc_page_memory( int size ) {
 			ptr = mmap(base_addr,size+EXTRA_SIZE,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
 			int offset = (int)((int_val)ptr) & (GC_PAGE_SIZE-1);
 			void *aligned = (char*)ptr + (GC_PAGE_SIZE - offset);
-			pextra *inf = (pextra*)(offset > (EXTRA_SIZE>>1) ? ((char*)ptr + EXTRA_SIZE - sizeof(pextra)) : (char*)ptr);
+			pextra *inf = (pextra*)( (char*)ptr + size + EXTRA_SIZE - sizeof(pextra));
 			inf->page_ptr = aligned;
 			inf->base_ptr = ptr;
 			inf->next = extra_pages;
@@ -1231,6 +1240,8 @@ static void gc_free_page_memory( void *ptr, int size ) {
 	VirtualFree(ptr, 0, MEM_RELEASE);
 #elif defined(HL_CONSOLE)
 	sys_free_align(ptr,size);
+#elif defined(HL_EMSCRIPTEN)
+	emscripten_builtin_free(ptr);
 #else
 	pextra *e = extra_pages, *prev = NULL;
 	while( e ) {
@@ -1271,16 +1282,13 @@ vdynamic *hl_alloc_dynbool( bool b ) {
 
 vdynamic *hl_alloc_obj( hl_type *t ) {
 	vobj *o;
-	int size;
 	int i;
 	hl_runtime_obj *rt = t->obj->rt;
 	if( rt == NULL || rt->methods == NULL ) rt = hl_get_obj_proto(t);
-	size = rt->size;
-	if( size & (HL_WSIZE-1) ) size += HL_WSIZE - (size & (HL_WSIZE-1));
 	if( t->kind == HSTRUCT ) {
-		o = (vobj*)hl_gc_alloc_gen(t, size, (rt->hasPtr ? MEM_KIND_RAW : MEM_KIND_NOPTR) | MEM_ZERO);
+		o = (vobj*)hl_gc_alloc_gen(t, rt->size, (rt->hasPtr ? MEM_KIND_RAW : MEM_KIND_NOPTR) | MEM_ZERO);
 	} else {
-		o = (vobj*)hl_gc_alloc_gen(t, size, (rt->hasPtr ? MEM_KIND_DYNAMIC : MEM_KIND_NOPTR) | MEM_ZERO);
+		o = (vobj*)hl_gc_alloc_gen(t, rt->size, (rt->hasPtr ? MEM_KIND_DYNAMIC : MEM_KIND_NOPTR) | MEM_ZERO);
 		o->t = t;
 	}
 	for(i=0;i<rt->nbindings;i++) {
@@ -1470,7 +1478,7 @@ static void gc_count_live_page( gc_pheader *p, int private_data ) {
 		gc_iter_live_blocks(p, gc_count_live_block);
 }
 
-static int hl_gc_get_live_objects( hl_type *t, varray *arr ) {
+HL_API int hl_gc_get_live_objects( hl_type *t, varray *arr ) {
 	if( !hl_is_dynamic(t) ) return -1;
 	gc_global_lock(true);
 	gc_stop_world(true);

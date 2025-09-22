@@ -8,6 +8,13 @@ enum DriverInitFlag {
 	DEBUG;
 }
 
+enum abstract Constant(Int) to Int {
+	public var TEXTURE_DATA_PITCH_ALIGNMENT;
+	public var TEXTURE_DATA_PLACEMENT_ALIGNMENT;
+	public var DESCRIPTOR_RANGE_OFFSET_APPEND;
+	public var RESOURCE_BARRIER_ALL_SUBRESOURCES;
+}
+
 enum abstract CommandListType(Int) {
 	public var DIRECT = 0;
 	public var BUNDLE = 1;
@@ -355,7 +362,7 @@ enum abstract ResourceState(Int) {
 	public var SHADING_RATE_SOURCE = 0x1000000;
 	public var GENERIC_READ = 0x1 | 0x2 | 0x40 | 0x80 | 0x200 | 0x800;
 	public var ALL_SHADER_RESOURCE = 0x40 | 0x80;
-	public var PRESENT = 0;
+	public var PRESENT = #if ( console && !xbogdk ) 0x100000 #else 0 #end;
 	public var PREDICATION = 0x200;
 	public var VIDE_DECODE_READ = 0x10000;
 	public var VIDE_DECODE_WRITE = 0x20000;
@@ -1044,6 +1051,7 @@ enum abstract InputClassification(Int) {
 @:struct class InputLayoutDesc {
 	public var inputElementDescs : hl.CArray<InputElementDesc>;
 	public var numElements : Int;
+	public var __padding : Int; // largest element
 	public function new() {
 	}
 }
@@ -1094,7 +1102,6 @@ enum abstract PipelineStateFlags(Int) {
 	@:packed public var rasterizerState(default,null) : RasterizerDesc;
 	@:packed public var depthStencilDesc(default,null) : DepthStencilDesc;
 	@:packed public var inputLayout(default,null) : InputLayoutDesc;
-	var __padding : Int; // ?
 	public var ibStripCutValue : IndexBufferStripCutValue;
 	public var primitiveTopologyType : PrimitiveTopologyType;
 	public var numRenderTargets : Int;
@@ -1624,6 +1631,10 @@ class Dx12 {
 	public static function resume() {
 	}
 
+	public static function getConstant( index : Int ) : Int {
+		return 0;
+	}
+
 	public static function getDeviceName() {
 		return @:privateAccess String.fromUCS2(dxGetDeviceName());
 	}
@@ -1657,5 +1668,4 @@ class Dx12 {
 	static function dxCreate( win : hl.Abstract<"dx_window">, flags : DriverInitFlags, deviceName : hl.Bytes ) : DriverInstance {
 		return null;
 	}
-
 }

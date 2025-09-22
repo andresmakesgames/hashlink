@@ -21,6 +21,7 @@
  */
 
 #include <hl.h>
+#include "hlsystem.h"
 
 typedef struct _hl_semaphore hl_semaphore;
 typedef struct _hl_condition hl_condition;
@@ -907,16 +908,10 @@ HL_PRIM hl_thread *hl_thread_start( void *callback, void *param, bool withGC ) {
 
 static void hl_run_thread( vclosure *c ) {
 	bool isExc;
-	varray *a;
-	int i;
 	vdynamic *exc = hl_dyn_call_safe(c,NULL,0,&isExc);
 	if( !isExc )
 		return;
-	a = hl_exception_stack();
-	uprintf(USTR("Uncaught exception: %s\n"), hl_to_string(exc));
-	for(i=0;i<a->size;i++)
-		uprintf(USTR("Called from %s\n"), hl_aptr(a,uchar*)[i]);
-	fflush(stdout);
+	hl_print_uncaught_exception(exc);
 }
 
 HL_PRIM hl_thread *hl_thread_create( vclosure *c ) {
@@ -970,7 +965,7 @@ HL_PRIM void hl_thread_set_name( hl_thread *t, const char *name ) {
 	// nothing
 #elif defined(HL_WIN)
 	SetThreadName((DWORD)(int_val)t,name);
-#elif defined(HL_MAC)
+#elif defined(HL_MAC) || defined(HL_IOS)
 	// pthread_setname_np only possible for current thread
 #else
 	pthread_setname_np((pthread_t)t,name);
@@ -1032,7 +1027,7 @@ HL_PRIM int hl_atomic_add32(int *a, int b) {
 #if defined(HL_GCC_ATOMICS)
   return __atomic_fetch_add(a, b, __ATOMIC_SEQ_CST);
 #elif defined(HL_VCC_ATOMICS)
-  return _InterlockedExchangeAdd((LONG volatile *)a, b);
+  return _InterlockedExchangeAdd((long volatile *)a, b);
 #endif
 }
 
@@ -1040,7 +1035,7 @@ HL_PRIM int hl_atomic_sub32(int *a, int b) {
 #if defined(HL_GCC_ATOMICS)
   return __atomic_fetch_sub(a, b, __ATOMIC_SEQ_CST);
 #elif defined(HL_VCC_ATOMICS)
-  return _InterlockedExchangeAdd((LONG volatile *)a, -b);
+  return _InterlockedExchangeAdd((long volatile *)a, -b);
 #endif
 }
 
@@ -1048,7 +1043,7 @@ HL_PRIM int hl_atomic_and32(int *a, int b) {
 #if defined(HL_GCC_ATOMICS)
   return __atomic_fetch_and(a, b, __ATOMIC_SEQ_CST);
 #elif defined(HL_VCC_ATOMICS)
-  return _InterlockedAnd((LONG volatile *)a, b);
+  return _InterlockedAnd((long volatile *)a, b);
 #endif
 }
 
@@ -1056,7 +1051,7 @@ HL_PRIM int hl_atomic_or32(int *a, int b) {
 #if defined(HL_GCC_ATOMICS)
   return __atomic_fetch_or(a, b, __ATOMIC_SEQ_CST);
 #elif defined(HL_VCC_ATOMICS)
-  return _InterlockedOr((LONG volatile *)a, b);
+  return _InterlockedOr((long volatile *)a, b);
 #endif
 }
 
@@ -1064,7 +1059,7 @@ HL_PRIM int hl_atomic_xor32(int *a, int b) {
 #if defined(HL_GCC_ATOMICS)
   return __atomic_fetch_xor(a, b, __ATOMIC_SEQ_CST);
 #elif defined(HL_VCC_ATOMICS)
-  return _InterlockedXor((LONG volatile *)a, b);
+  return _InterlockedXor((long volatile *)a, b);
 #endif
 }
 
@@ -1076,7 +1071,7 @@ HL_PRIM int hl_atomic_compare_exchange32(int *a, int expected,
                             __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
   return _expected;
 #elif defined(HL_VCC_ATOMICS)
-  return _InterlockedCompareExchange((LONG volatile *)a, replacement, expected);
+  return _InterlockedCompareExchange((long volatile *)a, replacement, expected);
 #endif
 }
 
@@ -1099,7 +1094,7 @@ HL_PRIM int hl_atomic_exchange32(int *a, int replacement) {
   __atomic_exchange(a, &replacement, &ret, __ATOMIC_SEQ_CST);
   return ret;
 #elif defined(HL_VCC_ATOMICS)
-  return _InterlockedExchange((LONG volatile *)a, replacement);
+  return _InterlockedExchange((long volatile *)a, replacement);
 #endif
 }
 
@@ -1119,7 +1114,7 @@ HL_PRIM int hl_atomic_load32(int *a) {
   __atomic_load(a, &ret, __ATOMIC_SEQ_CST);
   return ret;
 #elif defined(HL_VCC_ATOMICS)
-  return _InterlockedXor((LONG volatile *)a, 0);
+  return _InterlockedXor((long volatile *)a, 0);
 #endif
 }
 
@@ -1132,7 +1127,7 @@ HL_PRIM void *hl_atomic_load_ptr(void **a) {
 #ifdef HL_64
   return (void *)_InterlockedXor64((__int64 volatile *)a, 0);
 #else
-  return (void *)_InterlockedXor((LONG volatile *)a, 0);
+  return (void *)_InterlockedXor((long volatile *)a, 0);
 #endif
 #endif
 }
@@ -1142,7 +1137,7 @@ HL_PRIM int hl_atomic_store32(int *a, int value) {
   __atomic_store(a, &value, __ATOMIC_SEQ_CST);
   return value;
 #elif defined(HL_VCC_ATOMICS)
-  _InterlockedExchange((LONG volatile *)a, value);
+  _InterlockedExchange((long volatile *)a, value);
   return value;
 #endif
 }

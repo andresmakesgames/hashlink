@@ -236,18 +236,21 @@ HL_PRIM hl_runtime_obj *hl_get_obj_rt( hl_type *ot ) {
 		start = p->nfields;
 		memcpy(t->fields_indexes, p->fields_indexes, sizeof(int)*p->nfields);
 	}
-	size = p ? p->size : (ot->kind == HSTRUCT ? 0 : HL_WSIZE); // hl_type*
+	size = p ? p->size - p->pad_size : (ot->kind == HSTRUCT ? 0 : HL_WSIZE); // hl_type*
 	nlookup = 0;
+	int largest_field = p ? p->largest_field : size;
 	for(i=0;i<o->nfields;i++) {
 		hl_type *ft = o->fields[i].t;
-		hl_type *pad = ft;
-		while( pad->kind == HPACKED ) {
-			// align on first field
-			pad = pad->tparam;
-			while( pad->obj->super && hl_get_obj_rt(pad->obj->super)->nfields ) pad = pad->obj->super;
-			pad = pad->obj->fields[0].t;
-		}
-		size += hl_pad_struct(size,pad);
+		if( ft->kind == HPACKED ) {
+			// align on packed largest field
+			int large = hl_get_obj_rt(ft->tparam)->largest_field;
+			int pad = size % large;
+			if( pad != 0 )
+				size += large - pad;
+			if( large > largest_field )
+				largest_field = large;
+		} else
+			size += hl_pad_struct(size,ft);
 		t->fields_indexes[i+start] = size;
 		if( *o->fields[i].name )
 			hl_lookup_insert(t->lookup,nlookup++,o->fields[i].hashed_name,o->fields[i].t,size);
@@ -259,10 +262,22 @@ HL_PRIM hl_runtime_obj *hl_get_obj_rt( hl_type *ot ) {
 			if( rts->hasPtr ) t->hasPtr = true;
 			continue;
 		}
-		size += hl_type_size(ft);
+		int sz = hl_type_size(ft);
+		size += sz;
+		if( sz > largest_field ) largest_field = sz;
 		if( !t->hasPtr && hl_is_ptr(ft) ) t->hasPtr = true;
 	}
 	t->size = size;
+	t->pad_size = 0;
+	// align size on largest field size to match C, so arr[i].field is always aligned
+	if( largest_field > 0 ) {
+		int pad = size % largest_field;
+		if( pad != 0 ) {
+			t->pad_size = largest_field - pad;
+			t->size += t->pad_size;
+		}
+	}
+	t->largest_field = largest_field;
 	t->nmethods = p ? p->nmethods : o->nproto;
 	t->methods = NULL;
 	o->rt = t;
@@ -686,7 +701,7 @@ static void hl_dynobj_delete_field( vdynobj *o, hl_field_lookup *f ) {
 	int i;
 	unsigned int order = hl_dynobj_order(f);
 	int index = f->field_index & HL_DYNOBJ_INDEX_MASK;
-	bool is_ptr = hl_is_ptr(f->t); 
+	bool is_ptr = hl_is_ptr(f->t);
 	// erase data
 	if( is_ptr ) {
 		memmove(o->values + index, o->values + index + 1, (o->nvalues - (index + 1)) * sizeof(void*));
